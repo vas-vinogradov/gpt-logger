@@ -7,13 +7,18 @@ from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
 from googleapiclient.discovery import build
-from google.auth import default
-from google.oauth2 import service_account
+
+import os
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "personal-ai-backend-fb0f604787fe.json"
 
 app = FastAPI()
 
-SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
-SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
+
+
+#SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
+#SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
+SPREADSHEET_ID = "1By8vwwxhTmrDYZTHtBUnQ8wWKnlafC5I1c5WktZ-Qsy0"
+SHEET_NAME = "Sheet1"
 API_KEY = os.environ.get("API_KEY", "")
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -23,8 +28,7 @@ READ_RANGE = f"{SHEET_NAME}!A:E"
 
 
 def sheets_service():
-    credentials, _ = default(scopes=SCOPES)
-    return build("sheets", "v4", credentials=credentials)
+    return build("sheets", "v4")
 
 
 def append_row(row: list[Any]) -> None:
@@ -176,15 +180,36 @@ def summary_week():
 
 @app.get("/test")
 def test_read():
-    service = sheets_service()
-    sheet = service.spreadsheets()
+    import google.auth
+    try:
+        creds, project = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+        )
 
-    result = sheet.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{SHEET_NAME}!A1:E5"
-    ).execute()
+        meta = sheets_service().spreadsheets().get(
+            spreadsheetId=SPREADSHEET_ID
+        ).execute()
 
-    return result
+        return {
+            "ok": True,
+            "project": project,
+            "credentials_type": str(type(creds)),
+            "spreadsheet_id": SPREADSHEET_ID,
+            "spreadsheet_id_repr": repr(SPREADSHEET_ID),
+            "spreadsheet_id_len": len(SPREADSHEET_ID),
+            "sheet_name": SHEET_NAME,
+            "title": meta.get("properties", {}).get("title"),
+            "sheets": [s["properties"]["title"] for s in meta.get("sheets", [])],
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "spreadsheet_id": SPREADSHEET_ID,
+            "spreadsheet_id_repr": repr(SPREADSHEET_ID),
+            "spreadsheet_id_len": len(SPREADSHEET_ID),
+            "sheet_name": SHEET_NAME,
+            "error": str(e),
+        }
 
 @app.get("/health")
 def health():
