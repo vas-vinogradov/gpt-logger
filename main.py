@@ -10,10 +10,12 @@ from googleapiclient.discovery import build
 
 app = FastAPI()
 
-#SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
-#SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
-SPREADSHEET_ID = "1By8vwwxhTmrDYZTHtBUnQ8wWKnlafC5I1c5WktZ-Qsy0"
-SHEET_NAME = "Sheet1"
+
+CREDS_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "creds.json")
+SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
+SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
+#SPREADSHEET_ID = "1By8vwxhTmrDYZTHtBUnQ8wWKnlafC5I1c5WktZ-Qsy0"
+#SHEET_NAME = "Sheet1"
 API_KEY = os.environ.get("API_KEY", "")
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -27,7 +29,7 @@ from googleapiclient.discovery import build
 
 def sheets_service():
     creds = service_account.Credentials.from_service_account_file(
-        "creds.json",
+        CREDS_PATH,
         scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     return build("sheets", "v4", credentials=creds)
@@ -180,36 +182,35 @@ def summary_week():
         "events": week_events,
     }
 
+import json
+
 @app.get("/test")
 def test_read():
-    import google.auth
     try:
-        creds, project = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
-        )
+        with open(CREDS_PATH, "r", encoding="utf-8") as f:
+            secret_email = json.load(f).get("client_email")
 
-        meta = sheets_service().spreadsheets().get(
-            spreadsheetId=SPREADSHEET_ID
-        ).execute()
+        service = sheets_service()
+        meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
 
         return {
             "ok": True,
-            "project": project,
-            "credentials_type": str(type(creds)),
-            "spreadsheet_id": SPREADSHEET_ID,
-            "spreadsheet_id_repr": repr(SPREADSHEET_ID),
-            "spreadsheet_id_len": len(SPREADSHEET_ID),
-            "sheet_name": SHEET_NAME,
-            "title": meta.get("properties", {}).get("title"),
-            "sheets": [s["properties"]["title"] for s in meta.get("sheets", [])],
+            "creds_path": CREDS_PATH,
+            "client_email": secret_email,
+            "title": meta["properties"]["title"],
         }
     except Exception as e:
+        try:
+            with open(CREDS_PATH, "r", encoding="utf-8") as f:
+                secret_email = json.load(f).get("client_email")
+        except Exception:
+            secret_email = None
+
         return {
             "ok": False,
+            "creds_path": CREDS_PATH,
+            "client_email": secret_email,
             "spreadsheet_id": SPREADSHEET_ID,
-            "spreadsheet_id_repr": repr(SPREADSHEET_ID),
-            "spreadsheet_id_len": len(SPREADSHEET_ID),
-            "sheet_name": SHEET_NAME,
             "error": str(e),
         }
 
