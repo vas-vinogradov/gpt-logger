@@ -8,12 +8,7 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException
 from googleapiclient.discovery import build
 
-import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "personal-ai-backend-fb0f604787fe.json"
-
 app = FastAPI()
-
-
 
 #SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 #SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
@@ -27,8 +22,15 @@ WRITE_RANGE = f"{SHEET_NAME}!A:E"
 READ_RANGE = f"{SHEET_NAME}!A:E"
 
 
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
 def sheets_service():
-    return build("sheets", "v4")
+    creds = service_account.Credentials.from_service_account_file(
+        "creds.json",
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return build("sheets", "v4", credentials=creds)
 
 
 def append_row(row: list[Any]) -> None:
