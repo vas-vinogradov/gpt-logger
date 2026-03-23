@@ -4,18 +4,15 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
-
 from fastapi import FastAPI, Header, HTTPException
 from googleapiclient.discovery import build
 
 app = FastAPI()
 
 
-CREDS_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "creds.json")
+CREDS_PATH = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "/secrets/creds.json")
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
-#SPREADSHEET_ID = "1By8vwxhTmrDYZTHtBUnQ8wWKnlafC5I1c5WktZ-Qsy0"
-#SHEET_NAME = "Sheet1"
 API_KEY = os.environ.get("API_KEY", "")
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -131,6 +128,49 @@ def log_event(payload: dict, x_api_key: str | None = Header(default=None)):
     row = [timestamp, event, value, units, notes]
     append_row(row)
     return {"ok": True}
+
+def build_row(item: dict) -> list:
+    event = item.get("event")
+    if not event or not isinstance(event, str):
+        raise HTTPException(status_code=400, detail="missing or invalid event")
+
+    timestamp = item.get("timestamp") or datetime.now(timezone.utc).isoformat()
+    value = item.get("value", "")
+    units = item.get("units", "")
+    notes = item.get("notes", "")
+
+    return [timestamp, event, value, units, notes]
+
+def append_rows(rows: list[list]):
+    service = sheets_service()
+    body = {"values": rows}
+
+    service.spreadsheets().values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range="Sheet1!A:E",
+        valueInputOption="USER_ENTERED",
+        insertDataOption="INSERT_ROWS",
+        body=body,
+    ).execute()
+
+@app.post("/events")
+def log_events(payload: dict, x_api_key: str | None = Header(default=None)):
+    if API_KEY and x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    events = payload.get("events")
+    if not isinstance(events, list) or not events:
+        raise HTTPException(status_code=400, detail="missing or invalid events")
+
+    rows = [build_row(item) for item in events]
+
+    append_rows(rows)
+
+    return {
+        "ok": True,
+        "written": len(rows),
+        "rows": rows,
+    }
 
 
 @app.get("/summary/today")
